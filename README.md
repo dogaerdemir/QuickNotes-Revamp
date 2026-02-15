@@ -32,9 +32,3 @@ The app is designed for multiple storage backends via repository routing:
 - `firebase` -> `FirebaseNotesDataSourceStub` (placeholder)
 
 `NoteStorageOption` is already part of the domain and editor flow, so Firebase can be enabled later without breaking the presentation layer.
-
-## Next Step to Enable Firebase
-
-1. Replace `FirebaseNotesDataSourceStub` with a real Firebase implementation.
-2. Keep `NotesRepositoryImpl` unchanged (routing already exists).
-3. Enable Firebase segment in note editor UI.

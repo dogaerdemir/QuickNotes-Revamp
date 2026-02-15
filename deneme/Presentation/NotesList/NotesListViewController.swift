@@ -57,6 +57,15 @@ final class NotesListViewController: UIViewController {
         return item
     }()
 
+    private lazy var searchButton: UIBarButtonItem = {
+        UIBarButtonItem(
+            image: UIImage(systemName: "magnifyingglass"),
+            style: .plain,
+            target: self,
+            action: #selector(searchTapped)
+        )
+    }()
+
     private lazy var cancelSelectionButton: UIBarButtonItem = {
         UIBarButtonItem(
             title: "Vazgeç",
@@ -75,6 +84,18 @@ final class NotesListViewController: UIViewController {
         )
         button.isEnabled = false
         return button
+    }()
+
+    private lazy var searchController: UISearchController = {
+        let controller = UISearchController(searchResultsController: nil)
+        controller.obscuresBackgroundDuringPresentation = false
+        controller.hidesNavigationBarDuringPresentation = false
+        controller.searchResultsUpdater = self
+        controller.searchBar.delegate = self
+        controller.searchBar.placeholder = "Başlık veya içerikte ara"
+        controller.searchBar.autocapitalizationType = .none
+        controller.searchBar.autocorrectionType = .no
+        return controller
     }()
 
     init(viewModel: NotesListViewModel, editorFactory: @escaping NoteEditorFactory) {
@@ -104,6 +125,7 @@ final class NotesListViewController: UIViewController {
         title = "Notlar"
         navigationItem.largeTitleDisplayMode = .always
         view.backgroundColor = AppColors.background
+        definesPresentationContext = true
 
         tableView.register(NoteTableViewCell.self, forCellReuseIdentifier: NoteTableViewCell.reuseIdentifier)
         tableView.register(
@@ -163,7 +185,7 @@ final class NotesListViewController: UIViewController {
     }
 
     private func configureNavigationItems() {
-        navigationItem.leftBarButtonItem = nil
+        navigationItem.leftBarButtonItem = searchButton
         navigationItem.rightBarButtonItems = [addButton, sortButton]
     }
 
@@ -177,11 +199,28 @@ final class NotesListViewController: UIViewController {
             }
         }
 
-        return UIMenu(title: "Sıralama", children: actions)
+        return UIMenu(title: "Sıralama Ölçütü", children: actions)
     }
 
     @objc private func addNoteTapped() {
         openEditor(for: nil)
+    }
+
+    @objc private func searchTapped() {
+        if navigationItem.searchController == nil {
+            showSearchBar()
+            return
+        }
+
+        if searchController.isActive || !(searchController.searchBar.text ?? "").isEmpty {
+            hideSearchBar(clearQuery: true)
+        } else {
+            searchController.isActive = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.searchController.searchBar.becomeFirstResponder()
+            }
+        }
     }
 
     private func openEditor(for note: NoteItem?) {
@@ -301,6 +340,27 @@ final class NotesListViewController: UIViewController {
         guard state.sections.indices.contains(section) else { return }
         pendingAnimatedSectionToggle = section
         viewModel.toggleSection(at: section)
+    }
+
+    private func showSearchBar() {
+        navigationItem.searchController = searchController
+        navigationItem.hidesSearchBarWhenScrolling = false
+        searchController.isActive = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.searchController.searchBar.becomeFirstResponder()
+        }
+    }
+
+    private func hideSearchBar(clearQuery: Bool) {
+        if clearQuery {
+            searchController.searchBar.text = nil
+            viewModel.updateSearchQuery(nil)
+        }
+
+        searchController.isActive = false
+        navigationItem.searchController = nil
+        navigationItem.hidesSearchBarWhenScrolling = true
     }
 
     private func animateSectionToggleIfNeeded(
@@ -481,6 +541,16 @@ extension NotesListViewController: UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat {
         .leastNonzeroMagnitude
+    }
+}
+
+extension NotesListViewController: UISearchResultsUpdating, UISearchBarDelegate {
+    func updateSearchResults(for searchController: UISearchController) {
+        viewModel.updateSearchQuery(searchController.searchBar.text)
+    }
+
+    func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+        hideSearchBar(clearQuery: true)
     }
 }
 

@@ -57,6 +57,7 @@ final class NotesListViewModel {
     private var regularNotes: [NoteItem] = []
     private var isPinnedSectionCollapsed = false
     private var isRegularSectionCollapsed = false
+    private var searchQuery = ""
 
     init(
         useCase: NotesUseCase,
@@ -85,7 +86,6 @@ final class NotesListViewModel {
     func reloadNotes() {
         do {
             notes = try useCase.fetchNotes(sortedBy: selectedSortOption, storage: storage)
-            splitNotes()
             publishState()
         } catch {
             onError?(error.localizedDescription)
@@ -95,6 +95,14 @@ final class NotesListViewModel {
     func selectSortOption(_ option: NoteSortOption) {
         preferencesStore.selectedSortOption = option
         reloadNotes()
+    }
+
+    func updateSearchQuery(_ query: String?) {
+        let normalized = (query ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized != searchQuery else { return }
+        searchQuery = normalized
+        publishState()
     }
 
     func toggleSection(at index: Int) {
@@ -113,6 +121,7 @@ final class NotesListViewModel {
     }
 
     func note(at indexPath: IndexPath) -> NoteItem? {
+        refreshDisplayNotes()
         guard let section = stateSection(at: indexPath.section) else { return nil }
         let source = notesForSection(section.kind)
         guard source.indices.contains(indexPath.row) else { return nil }
@@ -151,16 +160,35 @@ final class NotesListViewModel {
         preferencesStore.showRelativeDates
     }
 
-    private func splitNotes() {
+    private func refreshDisplayNotes() {
+        let source = filteredNotes()
         pinnedNotes = []
         regularNotes = []
 
-        notes.forEach { note in
+        source.forEach { note in
             if note.isPinned {
                 pinnedNotes.append(note)
             } else {
                 regularNotes.append(note)
             }
+        }
+    }
+
+    private func filteredNotes() -> [NoteItem] {
+        guard !searchQuery.isEmpty else { return notes }
+
+        let query = searchableText(searchQuery)
+        return notes.filter { note in
+            if searchableText(note.displayTitle).contains(query) {
+                return true
+            }
+
+            guard showNoteContentPreview else {
+                return false
+            }
+
+            let searchableBody = note.isLocked ? "Kilitli" : note.content
+            return searchableText(searchableBody).contains(query)
         }
     }
 
@@ -215,6 +243,7 @@ final class NotesListViewModel {
     }
 
     private func buildSections() -> [NoteListSectionViewData] {
+        refreshDisplayNotes()
         var sections: [NoteListSectionViewData] = []
 
         if !pinnedNotes.isEmpty {
@@ -284,6 +313,12 @@ final class NotesListViewModel {
             .joined(separator: " ")
 
         return normalized.isEmpty ? "İçerik yok" : normalized
+    }
+
+    private func searchableText(_ text: String) -> String {
+        text
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "tr_TR"))
+            .lowercased()
     }
 
     private func formattedDateText(_ date: Date) -> String {
